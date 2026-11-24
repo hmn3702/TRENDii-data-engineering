@@ -32,6 +32,14 @@ SELECT (SELECT value FROM audit_load_counts WHERE metric = 'duplicate clicks rem
 -- test: repeated product entries collapsed into one impression | warn
 SELECT (SELECT value FROM audit_load_counts WHERE metric = 'repeated product entries collapsed into one impression');
 
+-- test: more than one impression event for the same page view and image | warn
+-- Impressions are de-duplicated by page view x image x product, so counts stay
+-- correct either way. This only flags that repeats are no longer all inside a
+-- single event (the docs state that they are, for the May 2025 data).
+SELECT count(*) - count(DISTINCT (page_view_id, event_data.image_id))
+FROM stg_events
+WHERE event_name = 'ProductImpressions';
+
 -- test: mounts without a tagload | warn
 SELECT count(*) FROM fct_mounts m
 WHERE NOT EXISTS (SELECT 1 FROM fct_page_views p WHERE p.page_view_id = m.page_view_id);

@@ -152,6 +152,11 @@ Every cleaning step records what it removed in the `audit_load_counts` table
 | Duplicate clicks (same `click_id`) | 0 |
 | Repeated product entries collapsed into one impression | 1,974,113 |
 
+Each page view x image has exactly one impression event (981,090 of each), so
+every repeat is inside a single event. A warn-level test flags future loads
+where that stops being true; the impression counts stay correct either way,
+because de-duplication is by page view x image x product.
+
 The real data had no re-delivered events or clicks; the de-duplication rules
 are there for production loads (and are proven on the test fixture, which does
 contain a re-delivered event). The only duplication in this data is inside

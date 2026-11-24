@@ -35,7 +35,7 @@ TRENDii-data-engineering/
 │   ├── 04_marts/                  # agg_daily_domain_funnel, agg_daily_product_performance
 │   └── 05_analysis/               # q1..q5 - one file per question
 ├── tests/
-│   ├── data_quality.sql           # 25 data-quality tests run inside the pipeline (error / warn)
+│   ├── data_quality.sql           # 26 data-quality tests run inside the pipeline (error / warn)
 │   ├── conftest.py                # builds a small fixture dataset with known answers
 │   └── test_pipeline.py           # 18 end-to-end tests (pytest)
 ├── .github/workflows/ci.yml       # runs the tests on every push
