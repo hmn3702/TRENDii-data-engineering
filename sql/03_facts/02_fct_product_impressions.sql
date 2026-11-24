@@ -1,0 +1,48 @@
+-- fct_product_impressions
+-- Grain: one row per product shown on one image in one page view
+--        (page_view_id, image_id, product_id).
+--
+-- Why de-duplicate? ~25% of product entries are repeated inside the
+-- same impression event (same product, same image, same page view). A
+-- product shown once on an image is one impression, so duplicates are
+-- collapsed. The raw count is kept in impression_occurrences so the
+-- un-deduplicated number is still available.
+--
+-- brand_id comes from dim_product (trusted), NOT from the event payload.
+-- campaign_sk = the campaign version for that brand valid on event_date.
+CREATE OR REPLACE TABLE fct_product_impressions AS
+WITH dedup AS (
+    SELECT
+        page_view_id,
+        image_id,
+        product_id,
+        min(event_date)            AS event_date,
+        min(impressed_at)          AS impressed_at,
+        any_value(publisher_id)    AS publisher_id,
+        any_value(article_url)     AS article_url,
+        any_value(device_id)       AS device_id,
+        min(product_position)      AS product_position,
+        any_value(advertised_price) AS advertised_price,
+        count(*)                   AS impression_occurrences
+    FROM stg_product_impressions
+    GROUP BY page_view_id, image_id, product_id
+)
+SELECT
+    d.page_view_id,
+    d.image_id,
+    d.product_id,
+    p.brand_id,
+    c.campaign_sk,
+    c.campaign_id,
+    d.event_date,
+    d.impressed_at,
+    d.publisher_id,
+    d.article_url,
+    d.publisher_id || ':' || d.device_id AS user_key,
+    d.product_position,
+    d.advertised_price,
+    d.impression_occurrences
+FROM dedup d
+LEFT JOIN dim_product  p ON p.product_id = d.product_id
+LEFT JOIN dim_campaign c ON c.brand_id = p.brand_id
+                        AND d.event_date BETWEEN c.valid_from AND c.valid_to;

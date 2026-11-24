@@ -1,0 +1,10 @@
+warehouse/
+*.duckdb
+*.duckdb.wal
+.tmp/
+__pycache__/
+*.zip
+
+# Inputs not committed: event data and the task brief
+data/*.parquet
+*.pdf
