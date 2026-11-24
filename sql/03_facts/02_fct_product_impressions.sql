@@ -2,11 +2,12 @@
 -- Grain: one row per product shown on one image in one page view
 --        (page_view_id, image_id, product_id).
 --
--- Why de-duplicate? ~25% of product entries are repeated inside the
--- same impression event (same product, same image, same page view). A
--- product shown once on an image is one impression, so duplicates are
--- collapsed. The raw count is kept in impression_occurrences so the
--- un-deduplicated number is still available.
+-- Why de-duplicate? Impression events often list the same product more
+-- than once for the same image. In the May 2025 data, 4,744,416 raw product
+-- entries collapse to 2,770,303 impressions: 41.6% of raw entries are
+-- repeats, and 42.8% of impressions appear more than once (up to 26 times).
+-- A product shown on an image is one impression, so repeats are collapsed.
+-- The raw count is kept in impression_occurrences.
 --
 -- brand_id comes from dim_product (trusted), NOT from the event payload.
 -- campaign_sk = the campaign version for that brand valid on event_date.
@@ -46,3 +47,8 @@ FROM dedup d
 LEFT JOIN dim_product  p ON p.product_id = d.product_id
 LEFT JOIN dim_campaign c ON c.brand_id = p.brand_id
                         AND d.event_date BETWEEN c.valid_from AND c.valid_to;
+
+INSERT INTO audit_load_counts
+SELECT 'fct_product_impressions', 'repeated product entries collapsed into one impression',
+       (SELECT count(*) FROM stg_product_impressions)
+       - (SELECT count(DISTINCT (page_view_id, image_id, product_id)) FROM fct_product_impressions);

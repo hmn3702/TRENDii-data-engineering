@@ -23,3 +23,9 @@ FROM (
 )
 WHERE image_id IS NOT NULL
 ORDER BY page_view_id, image_id, mount_index;
+
+INSERT INTO audit_load_counts
+SELECT 'stg_mounts', 'duplicate mounts (same page view and image) removed',
+       (SELECT count(*) FROM (SELECT unnest(event_data.mounts) AS m FROM stg_events WHERE event_name = 'Mounts')
+        WHERE m.image_id IS NOT NULL)
+       - (SELECT count(*) FROM stg_mounts);

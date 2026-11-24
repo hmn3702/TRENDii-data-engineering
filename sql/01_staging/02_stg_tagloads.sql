@@ -19,3 +19,7 @@ FROM (
     WHERE event_name = 'TagLoaded'
 )
 WHERE rn = 1;
+
+INSERT INTO audit_load_counts
+SELECT 'stg_tagloads', 'extra TagLoaded events for the same page view removed',
+       (SELECT count(*) FROM stg_events WHERE event_name = 'TagLoaded') - (SELECT count(*) FROM stg_tagloads);

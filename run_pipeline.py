@@ -64,6 +64,11 @@ def validate_inputs(data_dir: Path) -> None:
     log.info("Inputs OK: %d event files (%s .. %s)", len(parquet), parquet[0].stem, parquet[-1].stem)
 
 
+def sql_literal(value: str) -> str:
+    """Escape a value for use inside a single-quoted SQL string ('it''s')."""
+    return value.replace("'", "''")
+
+
 def render(sql: str, params: dict[str, str]) -> str:
     for key, value in params.items():
         sql = sql.replace("{{" + key + "}}", value)
@@ -105,12 +110,16 @@ def run_tests(con: duckdb.DuckDBPyConnection) -> bool:
     ok = True
     for name, severity, query in tests:
         try:
-            failing = con.execute(query).fetchone()[0] or 0
+            row = con.execute(query).fetchone()
         except duckdb.Error as exc:
             log.error("   ERROR  %-60s query failed: %s", name, exc)
             ok = False
             continue
-        if failing == 0:
+        failing = row[0] if row else None
+        if failing is None:
+            log.error("   ERROR  %-60s returned no value", name)
+            ok = False
+        elif failing == 0:
             log.info("   PASS   %s", name)
         elif severity == "warn":
             log.warning("   WARN   %-60s %d rows", name, failing)
@@ -128,7 +137,7 @@ def export_answers(con: duckdb.DuckDBPyConnection, out_dir: Path) -> None:
     log.info("== Exporting %d answer tables to %s", len(tables), out_dir)
     for t in tables:
         target = out_dir / f"{t.removeprefix('ans_')}.csv"
-        con.execute(f"COPY {t} TO '{target.as_posix()}' (HEADER, DELIMITER ',')")
+        con.execute(f"COPY {t} TO '{sql_literal(target.as_posix())}' (HEADER, DELIMITER ',')")
         log.info("   %s", target.name)
 
 
@@ -144,9 +153,17 @@ def main() -> int:
         db_path.parent.mkdir(parents=True, exist_ok=True)
         config = {"temp_directory": args.temp_dir} if args.temp_dir else {}
         with duckdb.connect(str(db_path), config=config) as con:
-            run_models(con, {"data_dir": data_dir.as_posix()})
-            tests_ok = True if args.skip_tests else run_tests(con)
-            export_answers(con, Path(args.output_dir).resolve())
+            run_models(con, {"data_dir": sql_literal(data_dir.as_posix())})
+            if args.skip_tests:
+                log.warning("Data-quality tests skipped (--skip-tests)")
+                tests_ok = True
+            else:
+                tests_ok = run_tests(con)
+            if tests_ok:
+                export_answers(con, Path(args.output_dir).resolve())
+            else:
+                log.error("Answers NOT exported because an error-level test failed. "
+                          "Any CSVs already in %s are from an earlier run.", args.output_dir)
     except PipelineError as exc:
         log.error("Pipeline failed: %s", exc)
         return 1

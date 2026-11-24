@@ -12,7 +12,7 @@ Every table the pipeline builds in `warehouse/trendii.duckdb`, with the meaning 
 - **Dimensions:** [`dim_date`](#dim_date), [`dim_publisher`](#dim_publisher), [`dim_article`](#dim_article), [`dim_user`](#dim_user), [`dim_brand`](#dim_brand), [`dim_product`](#dim_product), [`dim_campaign`](#dim_campaign)
 - **Marts:** [`agg_daily_domain_funnel`](#agg_daily_domain_funnel), [`agg_daily_product_performance`](#agg_daily_product_performance)
 - **Analysis outputs:** [`ans_q1_top_articles_by_domain`](#ans_q1_top_articles_by_domain), [`ans_q2_top_clicked_products_final_week`](#ans_q2_top_clicked_products_final_week), [`ans_q3_top_product_per_campaign`](#ans_q3_top_product_per_campaign), [`ans_q4_mount_rate_by_domain`](#ans_q4_mount_rate_by_domain), [`ans_q5_unique_users_advertised`](#ans_q5_unique_users_advertised)
-- **Staging:** [`stg_events`](#stg_events), [`stg_events_rejected`](#stg_events_rejected), [`stg_tagloads`](#stg_tagloads), [`stg_mounts`](#stg_mounts), [`stg_product_impressions`](#stg_product_impressions), [`stg_product_clicks`](#stg_product_clicks), [`stg_products`](#stg_products), [`stg_campaigns`](#stg_campaigns)
+- **Staging:** [`audit_load_counts`](#audit_load_counts), [`stg_events`](#stg_events), [`stg_events_rejected`](#stg_events_rejected), [`stg_tagloads`](#stg_tagloads), [`stg_mounts`](#stg_mounts), [`stg_product_impressions`](#stg_product_impressions), [`stg_product_clicks`](#stg_product_clicks), [`stg_products`](#stg_products), [`stg_campaigns`](#stg_campaigns)
 
 ## Facts
 
@@ -29,7 +29,7 @@ Funnel summary of each page load: did ads mount, were products shown, were they 
 | `page_view_id` | VARCHAR | Page View ID (`pvid`). One page load; regenerated on refresh. |
 | `event_date` | DATE | Day the event was generated, from the partition file name (YYYY-MM-DD.parquet). Use this for daily reporting. |
 | `tagloaded_at` | TIMESTAMP | When the TagLoaded event was ingested. |
-| `publisher_id` | INTEGER | Publisher ID. FK -> dim_publisher. |
+| `publisher_id` | BIGINT | Publisher ID. FK -> dim_publisher. |
 | `article_url` | VARCHAR | URL of the article (without protocol). Natural key of an article. FK -> dim_article. |
 | `user_key` | VARCHAR | User key = `publisher_id:device_id`. FK -> dim_user. |
 | `mounted_images` | BIGINT | Number of images that had an ad unit mounted. |
@@ -55,7 +55,7 @@ Every image that received a TRENDii ad unit.
 | `mount_index` | BIGINT | Position of the mount on the page; 0 = highest. |
 | `event_date` | DATE | Day the event was generated, from the partition file name (YYYY-MM-DD.parquet). Use this for daily reporting. |
 | `mounted_at` | TIMESTAMP | When the Mounts event was ingested. |
-| `publisher_id` | INTEGER | Publisher ID. FK -> dim_publisher. |
+| `publisher_id` | BIGINT | Publisher ID. FK -> dim_publisher. |
 | `article_url` | VARCHAR | URL of the article (without protocol). Natural key of an article. FK -> dim_article. |
 | `user_key` | VARCHAR | User key = `publisher_id:device_id`. FK -> dim_user. |
 
@@ -77,12 +77,12 @@ Product impressions, de-duplicated, enriched with the true brand and the campaig
 | `campaign_id` | VARCHAR | Business ID of the campaign (same across SCD versions). |
 | `event_date` | DATE | Day the event was generated, from the partition file name (YYYY-MM-DD.parquet). Use this for daily reporting. |
 | `impressed_at` | TIMESTAMP | When the ProductImpressions event was ingested (earliest, if repeated). |
-| `publisher_id` | INTEGER | Publisher ID. FK -> dim_publisher. |
+| `publisher_id` | BIGINT | Publisher ID. FK -> dim_publisher. |
 | `article_url` | VARCHAR | URL of the article (without protocol). Natural key of an article. FK -> dim_article. |
 | `user_key` | VARCHAR | User key = `publisher_id:device_id`. FK -> dim_user. |
 | `product_position` | BIGINT | Position of the product in the impression's products[] list (1 = first). |
 | `advertised_price` | DOUBLE | Product price shown in the ad at the time of the event (`product_price` in the event). |
-| `impression_occurrences` | BIGINT | How many times this product appeared in the raw event before de-duplication (usually 1-2). |
+| `impression_occurrences` | BIGINT | How many times this product appeared in the raw event before de-duplication. 1 for 57% of impressions, 2 for 31%, up to 26. |
 
 ### fct_product_clicks
 
@@ -103,7 +103,7 @@ Product clicks enriched with true brand and campaign version.
 | `campaign_id` | VARCHAR | Business ID of the campaign (same across SCD versions). |
 | `event_date` | DATE | Day the event was generated, from the partition file name (YYYY-MM-DD.parquet). Use this for daily reporting. |
 | `clicked_at` | TIMESTAMP | When the ProductClick event was ingested. |
-| `publisher_id` | INTEGER | Publisher ID. FK -> dim_publisher. |
+| `publisher_id` | BIGINT | Publisher ID. FK -> dim_publisher. |
 | `article_url` | VARCHAR | URL of the article (without protocol). Natural key of an article. FK -> dim_article. |
 | `user_key` | VARCHAR | User key = `publisher_id:device_id`. FK -> dim_user. |
 | `advertised_price` | DOUBLE | Product price shown in the ad at the time of the event (`product_price` in the event). |
@@ -141,7 +141,7 @@ Publisher websites.
 
 | Column | Type | Description |
 |---|---|---|
-| `publisher_id` | INTEGER | Publisher ID. FK -> dim_publisher. |
+| `publisher_id` | BIGINT | Publisher ID. FK -> dim_publisher. |
 | `domain` | VARCHAR | Publisher website domain, lower-cased (e.g. 7news.com.au). |
 
 ### dim_article
@@ -155,7 +155,7 @@ Articles that loaded the TRENDii tag.
 | Column | Type | Description |
 |---|---|---|
 | `article_url` | VARCHAR | URL of the article (without protocol). Natural key of an article. FK -> dim_article. |
-| `publisher_id` | INTEGER | Publisher ID. FK -> dim_publisher. |
+| `publisher_id` | BIGINT | Publisher ID. FK -> dim_publisher. |
 | `domain` | VARCHAR | Publisher website domain, lower-cased (e.g. 7news.com.au). |
 | `first_seen_date` | DATE | First day the article had traffic. |
 | `last_seen_date` | DATE | Last day the article had traffic. |
@@ -171,7 +171,7 @@ Users as TRENDii can identify them. The same person on two publishers or two dev
 | Column | Type | Description |
 |---|---|---|
 | `user_key` | VARCHAR | User key = `publisher_id:device_id`. FK -> dim_user. |
-| `publisher_id` | INTEGER | Publisher ID. FK -> dim_publisher. |
+| `publisher_id` | BIGINT | Publisher ID. FK -> dim_publisher. |
 | `device_id` | VARCHAR | Device ID (`did`). Unique only within a publisher. |
 | `first_seen_date` | DATE | First day the user was seen. |
 | `last_seen_date` | DATE | Last day the user was seen. |
@@ -256,7 +256,7 @@ Daily traffic and ad funnel KPIs per website. Ready for dashboards.
 | Column | Type | Description |
 |---|---|---|
 | `event_date` | DATE | Day the event was generated, from the partition file name (YYYY-MM-DD.parquet). Use this for daily reporting. |
-| `publisher_id` | INTEGER | Publisher ID. FK -> dim_publisher. |
+| `publisher_id` | BIGINT | Publisher ID. FK -> dim_publisher. |
 | `domain` | VARCHAR | Publisher website domain, lower-cased (e.g. 7news.com.au). |
 | `tagloads` | BIGINT | Number of page views where the TRENDii tag loaded. |
 | `users` | BIGINT | Distinct users that day. |
@@ -380,6 +380,20 @@ Q5 answer.
 
 ## Staging
 
+### audit_load_counts
+
+How many rows each cleaning step read, rejected or removed as duplicates. Reported by warn-level tests on every run.
+
+- **Grain:** One row per cleaning step and metric
+- **Key:** `model, metric`
+- **Rows:** 8
+
+| Column | Type | Description |
+|---|---|---|
+| `model` | VARCHAR | The model (table) that recorded the count. |
+| `metric` | VARCHAR | What was counted. |
+| `value` | BIGINT | Number of rows. |
+
 ### stg_events
 
 All valid events, de-duplicated on event_id, with event_context flattened.
@@ -394,7 +408,7 @@ All valid events, de-duplicated on event_id, with event_context flattened.
 | `event_name` | VARCHAR | TagLoaded, Mounts, ProductImpressions or ProductClick. |
 | `event_created_at` | TIMESTAMP | When the event was ingested (not generated). |
 | `event_date` | DATE | Day the event was generated, from the partition file name (YYYY-MM-DD.parquet). Use this for daily reporting. |
-| `publisher_id` | INTEGER | Publisher ID. FK -> dim_publisher. |
+| `publisher_id` | BIGINT | Publisher ID. FK -> dim_publisher. |
 | `domain` | VARCHAR | Publisher website domain, lower-cased (e.g. 7news.com.au). |
 | `article_url` | VARCHAR | URL of the article (without protocol). Natural key of an article. FK -> dim_article. |
 | `device_id` | VARCHAR | Device ID (`did`). Unique only within a publisher. |
@@ -417,7 +431,7 @@ Quarantine: events that failed validation. Empty for the provided data.
 | `event_name` | VARCHAR | Event type as received. |
 | `event_created_at` | TIMESTAMP | Ingestion time (NULL if unparseable). |
 | `event_date` | DATE | Day the event was generated, from the partition file name (YYYY-MM-DD.parquet). Use this for daily reporting. |
-| `publisher_id` | INTEGER | Publisher ID. FK -> dim_publisher. |
+| `publisher_id` | BIGINT | Publisher ID. FK -> dim_publisher. |
 | `domain` | VARCHAR | Publisher website domain, lower-cased (e.g. 7news.com.au). |
 | `article_url` | VARCHAR | URL of the article (without protocol). Natural key of an article. FK -> dim_article. |
 | `device_id` | VARCHAR | Device ID (`did`). Unique only within a publisher. |
@@ -441,7 +455,7 @@ TagLoaded events.
 | `event_id` | VARCHAR | Unique event ID (`eid`) from event_context. |
 | `tagloaded_at` | TIMESTAMP | Ingestion time of the TagLoaded event. |
 | `event_date` | DATE | Day the event was generated, from the partition file name (YYYY-MM-DD.parquet). Use this for daily reporting. |
-| `publisher_id` | INTEGER | Publisher ID. FK -> dim_publisher. |
+| `publisher_id` | BIGINT | Publisher ID. FK -> dim_publisher. |
 | `domain` | VARCHAR | Publisher website domain, lower-cased (e.g. 7news.com.au). |
 | `article_url` | VARCHAR | URL of the article (without protocol). Natural key of an article. FK -> dim_article. |
 | `device_id` | VARCHAR | Device ID (`did`). Unique only within a publisher. |
@@ -461,7 +475,7 @@ Mounts events with mounts[] unnested.
 | `event_id` | VARCHAR | Unique event ID (`eid`) from event_context. |
 | `mounted_at` | TIMESTAMP | Ingestion time of the Mounts event. |
 | `event_date` | DATE | Day the event was generated, from the partition file name (YYYY-MM-DD.parquet). Use this for daily reporting. |
-| `publisher_id` | INTEGER | Publisher ID. FK -> dim_publisher. |
+| `publisher_id` | BIGINT | Publisher ID. FK -> dim_publisher. |
 | `domain` | VARCHAR | Publisher website domain, lower-cased (e.g. 7news.com.au). |
 | `article_url` | VARCHAR | URL of the article (without protocol). Natural key of an article. FK -> dim_article. |
 | `device_id` | VARCHAR | Device ID (`did`). Unique only within a publisher. |
@@ -482,7 +496,7 @@ ProductImpressions events with products[] unnested.
 | `event_id` | VARCHAR | Unique event ID (`eid`) from event_context. |
 | `impressed_at` | TIMESTAMP | Ingestion time of the event. |
 | `event_date` | DATE | Day the event was generated, from the partition file name (YYYY-MM-DD.parquet). Use this for daily reporting. |
-| `publisher_id` | INTEGER | Publisher ID. FK -> dim_publisher. |
+| `publisher_id` | BIGINT | Publisher ID. FK -> dim_publisher. |
 | `domain` | VARCHAR | Publisher website domain, lower-cased (e.g. 7news.com.au). |
 | `article_url` | VARCHAR | URL of the article (without protocol). Natural key of an article. FK -> dim_article. |
 | `device_id` | VARCHAR | Device ID (`did`). Unique only within a publisher. |
@@ -509,7 +523,7 @@ ProductClick events.
 | `event_id` | VARCHAR | Unique event ID (`eid`) from event_context. |
 | `clicked_at` | TIMESTAMP | Ingestion time of the event. |
 | `event_date` | DATE | Day the event was generated, from the partition file name (YYYY-MM-DD.parquet). Use this for daily reporting. |
-| `publisher_id` | INTEGER | Publisher ID. FK -> dim_publisher. |
+| `publisher_id` | BIGINT | Publisher ID. FK -> dim_publisher. |
 | `domain` | VARCHAR | Publisher website domain, lower-cased (e.g. 7news.com.au). |
 | `article_url` | VARCHAR | URL of the article (without protocol). Natural key of an article. FK -> dim_article. |
 | `device_id` | VARCHAR | Device ID (`did`). Unique only within a publisher. |

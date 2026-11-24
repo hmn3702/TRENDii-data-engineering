@@ -21,3 +21,11 @@ FROM stg_events
 WHERE event_name = 'ProductClick'
   AND event_data.click_id IS NOT NULL
 ORDER BY click_id, event_created_at;
+
+INSERT INTO audit_load_counts
+SELECT 'stg_product_clicks', 'clicks without a click_id dropped',
+       (SELECT count(*) FROM stg_events WHERE event_name = 'ProductClick' AND event_data.click_id IS NULL)
+UNION ALL
+SELECT 'stg_product_clicks', 'duplicate clicks removed (same click_id)',
+       (SELECT count(*) FROM stg_events WHERE event_name = 'ProductClick' AND event_data.click_id IS NOT NULL)
+       - (SELECT count(*) FROM stg_product_clicks);

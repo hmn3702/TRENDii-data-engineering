@@ -13,6 +13,9 @@
 --     instead of failing the whole load.
 --   * Duplicate event ids (re-delivered events) are de-duplicated,
 --     keeping the earliest ingested copy.
+--   * audit_load_counts records how many rows each cleaning step removed,
+--     so de-duplication is visible (it is checked by warn-level tests).
+--     Later staging/fact models append their own counts to it.
 -- =====================================================================
 CREATE OR REPLACE TABLE stg_events_raw AS
 SELECT
@@ -21,7 +24,7 @@ SELECT
     TRY_CAST(event_created_at AS TIMESTAMP)             AS event_created_at,
     TRY_CAST(regexp_extract(filename, '(\d{4}-\d{2}-\d{2})\.parquet$', 1) AS DATE)
                                                         AS event_date,
-    event_context.publisher_id::INTEGER                 AS publisher_id,
+    event_context.publisher_id::BIGINT                  AS publisher_id,
     lower(event_context.domain)                         AS domain,
     event_context.url                                   AS article_url,
     event_context.did                                   AS device_id,
@@ -63,5 +66,14 @@ FROM (
       AND event_name IN ('TagLoaded', 'Mounts', 'ProductImpressions', 'ProductClick')
 )
 WHERE rn = 1;
+
+CREATE OR REPLACE TABLE audit_load_counts AS
+SELECT 'stg_events' AS model, 'raw event rows read' AS metric, count(*) AS value FROM stg_events_raw
+UNION ALL
+SELECT 'stg_events', 'events rejected (invalid)', (SELECT count(*) FROM stg_events_rejected)
+UNION ALL
+SELECT 'stg_events', 're-delivered events removed (duplicate event_id)',
+       (SELECT count(*) FROM stg_events_raw) - (SELECT count(*) FROM stg_events_rejected)
+       - (SELECT count(*) FROM stg_events);
 
 DROP TABLE stg_events_raw;

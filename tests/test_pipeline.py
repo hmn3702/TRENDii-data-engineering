@@ -5,7 +5,7 @@ and check every answer against values worked out by hand.
 import subprocess
 import sys
 
-from conftest import BED, DESK, OZ, ROOT, WRONG_BRAND
+from conftest import BED, DESK, OZ, ROOT, WRONG_BRAND, run_pipeline, write_fixture
 
 FF_CAMPAIGN = "14929485386"   # Fantastic Furniture, CPC 1.00
 OZ_CAMPAIGN = "33451439714"   # Oz Home Hub, CPC 0.50 until 12 May, 0.75 from 13 May
@@ -39,6 +39,25 @@ def test_missing_data_folder_fails_cleanly(tmp_path):
     assert "Data folder not found" in result.stderr
 
 
+def test_paths_with_apostrophe_work(fixture_dir, pipeline_run):
+    # fixture and output folders are named "o'brien data..." and "run's output..."
+    assert "'" in str(fixture_dir) and "'" in str(pipeline_run["output"])
+    assert pipeline_run["result"].returncode == 0, pipeline_run["result"].stderr
+
+
+def test_overlapping_campaigns_for_one_brand_fail_and_block_export(tmp_path):
+    # A second Fantastic Furniture campaign valid at the same time as the real one
+    # would double-count every FF impression and click.
+    data = write_fixture(tmp_path / "data", extra_campaign_rows=[
+        "99999999999,FF Overlap Test,64e364739768e915be413729,CPC,2,,,Fantastic Furniture,"
+        "fantasticfurniture.com.au,2025-01-01,2025-05-01,9999-12-31,TRUE"])
+    run = run_pipeline(data, tmp_path / "run")
+    assert run["result"].returncode == 2
+    assert "overlapping campaign versions for the same brand" in run["result"].stderr
+    assert "Answers NOT exported" in run["result"].stderr
+    assert not list(run["output"].glob("*.csv"))
+
+
 # ---------------------------------------------------------------- staging
 
 def test_bad_event_is_quarantined_not_loaded(con):
@@ -48,6 +67,19 @@ def test_bad_event_is_quarantined_not_loaded(con):
 def test_duplicate_event_is_removed(con):
     # 6 events on day 12 + 12 rows on day 13, minus 1 duplicate and 1 rejected
     assert rows(con, "SELECT count(*), count(DISTINCT event_id) FROM stg_events") == [(16, 16)]
+
+
+def test_audit_counts_record_what_cleaning_removed(con):
+    assert dict(rows(con, "SELECT metric, value FROM audit_load_counts")) == {
+        "raw event rows read": 18,
+        "events rejected (invalid)": 1,
+        "re-delivered events removed (duplicate event_id)": 1,
+        "extra TagLoaded events for the same page view removed": 0,
+        "duplicate mounts (same page view and image) removed": 0,
+        "clicks without a click_id dropped": 0,
+        "duplicate clicks removed (same click_id)": 0,
+        "repeated product entries collapsed into one impression": 1,
+    }
 
 
 def test_event_date_comes_from_partition_not_ingestion_time(con):

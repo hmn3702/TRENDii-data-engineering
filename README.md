@@ -21,11 +21,11 @@ DuckDB, answers the five analysis questions, and checks data quality.
 ## Project structure
 
 ```
-Task_1/
+TRENDii-data-engineering/
 ├── data/                          # input (not modified)
-│   ├── 2025-05-01.parquet ... 2025-05-31.parquet
 │   ├── dim_product.csv
-│   └── dim_campaign.csv
+│   ├── dim_campaign.csv
+│   └── (2025-05-01.parquet ... 2025-05-31.parquet - not in the repo, add them here)
 ├── sql/
 │   ├── 01_staging/                # parse, type, flatten, de-duplicate, quarantine bad rows
 │   ├── 02_dimensions/             # dim_date, dim_publisher, dim_article, dim_user,
@@ -35,9 +35,9 @@ Task_1/
 │   ├── 04_marts/                  # agg_daily_domain_funnel, agg_daily_product_performance
 │   └── 05_analysis/               # q1..q5 - one file per question
 ├── tests/
-│   ├── data_quality.sql           # 18 data-quality tests run inside the pipeline (error / warn)
+│   ├── data_quality.sql           # 25 data-quality tests run inside the pipeline (error / warn)
 │   ├── conftest.py                # builds a small fixture dataset with known answers
-│   └── test_pipeline.py           # 15 end-to-end tests (pytest)
+│   └── test_pipeline.py           # 18 end-to-end tests (pytest)
 ├── .github/workflows/ci.yml       # runs the tests on every push
 ├── run_pipeline.py                # runner
 ├── requirements.txt
@@ -53,7 +53,8 @@ Task_1/
 
 ## Setup
 
-Requires Python 3.9+.
+Requires Python 3.10+ (CI tests 3.10 and 3.12). `requirements.txt` pins the DuckDB
+version the results were produced and tested with.
 
 ```bash
 python -m pip install -r requirements.txt
@@ -83,7 +84,9 @@ python run_pipeline.py --temp-dir D:/tmp # where DuckDB may spill to disk
 python run_pipeline.py -v                # verbose logging
 ```
 
-Exit codes: `0` success, `1` a model or input failed, `2` an `error`-level test failed.
+Exit codes: `0` success, `1` a model or input failed, `2` an `error`-level test
+failed. When an `error` test fails the answers are **not** exported, so wrong
+numbers never reach `output/`.
 
 ## Explore the results
 
@@ -105,7 +108,9 @@ Two kinds of tests:
    `brand_id` in events, duplicate products in an impression, a re-delivered
    event, an event ingested after midnight, a broken event, a campaign rate
    change mid-period and one device id on two publishers - so each handling
-   rule is proven by a test.
+   rule is proven by a test. Further tests prove that overlapping campaigns
+   for one brand stop the run without exporting answers, and that folder
+   paths containing `'` work (fixture folders are named `o'brien data...`).
 
 ```bash
 python -m pip install -r requirements-dev.txt
@@ -123,14 +128,20 @@ and 3.12 on every push and pull request. The real event data is not needed.
   unparseable timestamp or unknown event type go to `stg_events_rejected`
   with a `reject_reason`.
 - **De-duplication:** by `eid` (events), `click_id` (clicks), page view
-  (tagloads) and page view x image x product (impressions).
+  (tagloads), page view x image (mounts) and page view x image x product
+  (impressions). Every step's removed-row count is stored in
+  `audit_load_counts` and reported by warn-level tests.
+- **No wrong answers exported:** answers are written only if every
+  `error`-level test passes.
+- **Safe paths:** folder paths are escaped before going into SQL.
 - **Explicit schemas** for CSVs, so type guessing cannot change between runs.
 - **One transaction per model:** a failing model rolls back and the error
   names the file.
 - **Idempotent:** every model is `CREATE OR REPLACE`; re-running gives the same result.
-- **Data-quality tests** (`tests/data_quality.sql`): uniqueness, referential
-  integrity across the funnel, SCD2 overlaps, campaign fan-out, unknown
-  products. `error` tests fail the run; `warn` tests are logged.
+- **Data-quality tests** (`tests/data_quality.sql`): referential integrity
+  across the funnel, overlapping campaigns per brand, campaign fan-out,
+  unknown products, de-duplication counts, and checks that the event payload
+  agrees with `dim_product`. `error` tests fail the run; `warn` tests are logged.
 
 ## Scaling notes
 

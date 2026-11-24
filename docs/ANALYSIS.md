@@ -41,7 +41,14 @@ than dropping one arbitrarily). Full URLs are in the CSV.
 
 ## Q2. Top three clicked products per brand - final week (25-31 May 2025)
 
-"Final week" = the last 7 days of the data, calculated from the data.
+"Final week" = the last 7 days of the data, calculated from the data:
+Sunday 25 May to Saturday 31 May 2025.
+
+*Alternative reading:* if "week" means the last full Monday-to-Sunday
+calendar week (common in Australia), the window is **19-25 May 2025**. The top
+product per brand is the same; only the counts change: Country Road 79,
+Fantastic Furniture 73, Forever New 73, Oz Home Hub 79 clicks. To switch, filter
+on `dim_date.week_start_monday` instead of the last 7 days.
 
 | Brand | Rank | Product | Clicks |
 |---|---|---|---|
@@ -56,7 +63,8 @@ empty. 280 clicks in total that week.
 
 **Why the brand comes from `dim_product`:** the `brand_id` inside click events
 disagrees with the product's real brand in 1,044 of 1,402 clicks. Grouping by the
-event's brand would credit e.g. the Forever New skirt to Oz Home Hub.
+event's brand would credit e.g. the Forever New skirt to Oz Home Hub. The evidence
+that `dim_product` is the reliable side is in *Brand evidence* below.
 
 ## Q3. Product with the most impressions per campaign
 
@@ -107,12 +115,58 @@ one person on two devices (or with cleared storage) counts more than once.
 
 ---
 
+## Brand evidence: why `dim_product` is trusted over the event's brand_id
+
+For the same `product_id`, compare each field in the event payload with
+`dim_product`:
+
+| Field in event payload | Impression rows matching (4,744,416) | Clicks matching (1,402) |
+|---|---|---|
+| Product name | 100% | 100% |
+| Product URL | 100% | 100% |
+| Advertised price = RRP in `dim_product` | 100% | 100% |
+| **Brand ID** | **25.0%** | **25.5%** |
+
+Everything in the payload that describes the product agrees with
+`dim_product`, so `product_id` points at the right product. Only the brand
+disagrees, and for every one of the 4 products the event's `brand_id` is split
+almost exactly evenly - 24.9% to 25.1% each - across the 4 brands that have
+activity. That is what a brand picked at random would look like (right 1 time in
+4), not a systematic mapping error. These comparisons run as warn-level tests on
+every pipeline run.
+
+---
+
+## De-duplication: what was removed
+
+Every cleaning step records what it removed in the `audit_load_counts` table
+(also reported by warn-level tests on each run):
+
+| Step | Removed |
+|---|---|
+| Invalid events quarantined (`stg_events_rejected`) | 0 |
+| Re-delivered events (duplicate `event_id`) | 0 |
+| Extra TagLoaded events for the same page view | 0 |
+| Duplicate mounts (same page view and image) | 0 |
+| Clicks without a `click_id` | 0 |
+| Duplicate clicks (same `click_id`) | 0 |
+| Repeated product entries collapsed into one impression | 1,974,113 |
+
+The real data had no re-delivered events or clicks; the de-duplication rules
+are there for production loads (and are proven on the test fixture, which does
+contain a re-delivered event). The only duplication in this data is inside
+impression events: 41.6% of the 4,744,416 raw product entries repeat an entry
+already in the same event, and 42.8% of the 2,770,303 impressions appear more
+than once (up to 26 times).
+
+---
+
 ## Data-quality findings
 
 | Finding | Size | How it is handled |
 |---|---|---|
-| Event `brand_id` does not match the product's brand | 3.56M of 4.74M impression rows; 1,044 of 1,402 clicks | Brand taken from `dim_product` |
-| Duplicate products inside one impression event | ~1.97M extra rows (4.74M raw -> 2.77M unique) | De-duplicated; raw count kept |
+| Event `brand_id` does not match the product's brand | 3,558,998 of 4,744,416 impression rows; 1,044 of 1,402 clicks | Brand taken from `dim_product` (see *Brand evidence*) |
+| Repeated products inside one impression event | 1,974,113 of 4,744,416 raw entries (41.6%) | De-duplicated; raw count kept |
 | Events ingested after midnight | 1,091 events | Day taken from partition (generation date) |
 | Iconic campaign has blank `product_type` | 1 campaign | Inferred as CPC from `cpc_rate`, flagged |
 | Only 4 of 245 products appear in events; The Iconic has no events | - | Noted; queries still general |

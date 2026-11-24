@@ -126,42 +126,56 @@ def build_events() -> dict[str, list[dict]]:
     return {"2025-05-12": day12, "2025-05-13": day13}
 
 
-def write_fixture(target: Path) -> Path:
+def _sql(value: str) -> str:
+    return value.replace("'", "''")
+
+
+def write_fixture(target: Path, extra_campaign_rows: list[str] | None = None) -> Path:
+    """Write the fixture into `target`. extra_campaign_rows are appended to dim_campaign.csv."""
     target.mkdir(parents=True, exist_ok=True)
     for name in ("dim_product.csv", "dim_campaign.csv"):
         shutil.copy(ROOT / "data" / name, target / name)
+    if extra_campaign_rows:
+        campaigns = (target / "dim_campaign.csv").read_text(encoding="utf-8").rstrip("\n")
+        (target / "dim_campaign.csv").write_text(
+            campaigns + "\n" + "\n".join(extra_campaign_rows) + "\n", encoding="utf-8")
     con = duckdb.connect()
     for day, events in build_events().items():
         ndjson = target / f"{day}.ndjson"
         ndjson.write_text("\n".join(json.dumps(e) for e in events), encoding="utf-8")
         con.execute(f"""
             COPY (
-                SELECT * FROM read_json('{ndjson.as_posix()}', format = 'newline_delimited', columns = {{
+                SELECT * FROM read_json('{_sql(ndjson.as_posix())}', format = 'newline_delimited', columns = {{
                     'event_created_at': 'VARCHAR', 'event_name': 'VARCHAR',
                     'event_data': '{EVENT_DATA_TYPE}', 'event_context': '{EVENT_CONTEXT_TYPE}'
                 }})
-            ) TO '{(target / f"{day}.parquet").as_posix()}' (FORMAT PARQUET)
+            ) TO '{_sql((target / f"{day}.parquet").as_posix())}' (FORMAT PARQUET)
         """)
         ndjson.unlink()
     con.close()
     return target
 
 
+def run_pipeline(data_dir: Path, out: Path) -> dict:
+    db = out / "test.duckdb"
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "run_pipeline.py"),
+         "--data-dir", str(data_dir), "--db", str(db), "--output-dir", str(out / "output")],
+        capture_output=True, text=True,
+    )
+    return {"result": result, "db": db, "output": out / "output"}
+
+
+# Folder names contain an apostrophe on purpose: paths are placed inside SQL
+# string literals, so this proves they are escaped correctly.
 @pytest.fixture(scope="session")
 def fixture_dir(tmp_path_factory) -> Path:
-    return write_fixture(tmp_path_factory.mktemp("fixture_data"))
+    return write_fixture(tmp_path_factory.mktemp("o'brien data"))
 
 
 @pytest.fixture(scope="session")
 def pipeline_run(fixture_dir, tmp_path_factory):
-    out = tmp_path_factory.mktemp("run")
-    db = out / "test.duckdb"
-    result = subprocess.run(
-        [sys.executable, str(ROOT / "run_pipeline.py"),
-         "--data-dir", str(fixture_dir), "--db", str(db), "--output-dir", str(out / "output")],
-        capture_output=True, text=True,
-    )
-    return {"result": result, "db": db, "output": out / "output"}
+    return run_pipeline(fixture_dir, tmp_path_factory.mktemp("run's output"))
 
 
 @pytest.fixture(scope="session")
