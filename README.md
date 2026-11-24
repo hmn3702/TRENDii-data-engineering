@@ -6,6 +6,7 @@ DuckDB, answers the five analysis questions, and checks data quality.
 
 - **Answers:** [`docs/ANALYSIS.md`](docs/ANALYSIS.md) (CSV versions in `output/`)
 - **Model design:** [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md)
+- **Data dictionary (every table and column):** [`docs/DATA_DICTIONARY.md`](docs/DATA_DICTIONARY.md)
 
 ## Tech choices
 
@@ -38,6 +39,7 @@ Task_1/
 ├── warehouse/                     # trendii.duckdb (generated, git-ignored)
 └── docs/
     ├── ANALYSIS.md                # answers + data-quality findings
+    ├── DATA_DICTIONARY.md         # every table and column explained
     └── DATA_MODEL.md              # schema, grains, decisions
 ```
 

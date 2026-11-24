@@ -9,7 +9,7 @@ SELECT
     count(*)                                              AS tagloads,
     count(*) FILTER (WHERE f.has_mount)                   AS mounts,
     round(100.0 * count(*) FILTER (WHERE f.has_mount) / count(*), 2) AS mount_rate_pct,
-    sum(f.mounted_images)                                 AS mounted_images,
+    sum(f.mounted_images)::BIGINT                         AS mounted_images,
     round(sum(f.mounted_images) / count(*), 2)            AS mounted_images_per_tagload
 FROM fct_page_views f
 JOIN dim_publisher p USING (publisher_id)
@@ -20,7 +20,7 @@ SELECT
     count(*),
     count(*) FILTER (WHERE has_mount),
     round(100.0 * count(*) FILTER (WHERE has_mount) / count(*), 2),
-    sum(mounted_images),
+    sum(mounted_images)::BIGINT,
     round(sum(mounted_images) / count(*), 2)
 FROM fct_page_views
 )

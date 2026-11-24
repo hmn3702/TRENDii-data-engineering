@@ -8,7 +8,7 @@ WITH per_product AS (
         i.campaign_id,
         i.product_id,
         count(*)                      AS impressions,
-        sum(i.impression_occurrences) AS raw_impression_occurrences
+        sum(i.impression_occurrences)::BIGINT AS raw_impression_occurrences
     FROM fct_product_impressions i
     WHERE i.campaign_id IS NOT NULL
     GROUP BY ALL

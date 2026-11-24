@@ -9,10 +9,10 @@ SELECT
     count(*)                                         AS tagloads,
     count(DISTINCT f.user_key)                       AS users,
     count(*) FILTER (WHERE f.has_mount)              AS page_views_with_mount,
-    sum(f.mounted_images)                            AS mounted_images,
+    sum(f.mounted_images)::BIGINT                    AS mounted_images,
     count(*) FILTER (WHERE f.has_impression)         AS page_views_with_impression,
-    sum(f.product_impressions)                       AS product_impressions,
-    sum(f.clicks)                                    AS clicks,
+    sum(f.product_impressions)::BIGINT               AS product_impressions,
+    sum(f.clicks)::BIGINT                            AS clicks,
     round(count(*) FILTER (WHERE f.has_mount) / count(*), 4)          AS mount_rate,
     round(sum(f.clicks) / nullif(sum(f.product_impressions), 0), 6)   AS click_through_rate
 FROM fct_page_views f
