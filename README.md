@@ -1,5 +1,7 @@
 # TRENDii - Data Engineering Task
 
+[![CI](https://github.com/hmn3702/TRENDii-data-engineering/actions/workflows/ci.yml/badge.svg)](https://github.com/hmn3702/TRENDii-data-engineering/actions/workflows/ci.yml)
+
 Turns raw ad-tech events (tagloads, mounts, product impressions, clicks) plus
 product and campaign dimensions into an analysis-ready **star schema** in
 DuckDB, answers the five analysis questions, and checks data quality.
@@ -32,9 +34,15 @@ Task_1/
 │   │                              # fct_product_impressions, fct_product_clicks
 │   ├── 04_marts/                  # agg_daily_domain_funnel, agg_daily_product_performance
 │   └── 05_analysis/               # q1..q5 - one file per question
-├── tests/data_quality.sql         # 18 data-quality tests (error / warn)
+├── tests/
+│   ├── data_quality.sql           # 18 data-quality tests run inside the pipeline (error / warn)
+│   ├── conftest.py                # builds a small fixture dataset with known answers
+│   └── test_pipeline.py           # 15 end-to-end tests (pytest)
+├── .github/workflows/ci.yml       # runs the tests on every push
 ├── run_pipeline.py                # runner
 ├── requirements.txt
+├── requirements-dev.txt           # + pytest
+├── pytest.ini
 ├── output/                        # answer CSVs (generated)
 ├── warehouse/                     # trendii.duckdb (generated, git-ignored)
 └── docs/
@@ -83,6 +91,29 @@ Exit codes: `0` success, `1` a model or input failed, `2` an `error`-level test 
 duckdb warehouse/trendii.duckdb     # DuckDB CLI, or:
 python -c "import duckdb; print(duckdb.connect('warehouse/trendii.duckdb').sql('SELECT * FROM agg_daily_domain_funnel LIMIT 10'))"
 ```
+
+## Tests & CI
+
+Two kinds of tests:
+
+1. **Data-quality tests** (`tests/data_quality.sql`) run inside every pipeline
+   run against the real data.
+2. **End-to-end tests** (`tests/test_pipeline.py`) build a tiny hand-made
+   dataset (`tests/conftest.py`) in the same Parquet format, run the whole
+   pipeline on it, and compare every answer with values worked out by hand.
+   The fixture deliberately includes the real data's problems - wrong
+   `brand_id` in events, duplicate products in an impression, a re-delivered
+   event, an event ingested after midnight, a broken event, a campaign rate
+   change mid-period and one device id on two publishers - so each handling
+   rule is proven by a test.
+
+```bash
+python -m pip install -r requirements-dev.txt
+python -m pytest -v
+```
+
+GitHub Actions (`.github/workflows/ci.yml`) runs the same tests on Python 3.10
+and 3.12 on every push and pull request. The real event data is not needed.
 
 ## Error handling & reliability
 
